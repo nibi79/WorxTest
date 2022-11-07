@@ -2,6 +2,7 @@ package org.worx.test;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.util.HashMap;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Logger;
@@ -34,6 +35,8 @@ import software.amazon.awssdk.iot.AwsIotMqttConnectionBuilder;
 
 public class Test {
 
+    private static final String USERDATA_MQTT_ENDPOINT = "mqtt_endpoint";
+    private static final String USERDATA_ID = "id";
     private static Logger logger = Logger.getLogger(Logger.GLOBAL_LOGGER_NAME);
 
     public static void main(String[] args)
@@ -46,8 +49,10 @@ public class Test {
         // get token
         String token = getAccessToken(username, password);
 
-        // get mqqtendpoint
-        String mqttEndpoint = getMqttEndpoint(token);
+        // get userData
+        HashMap<String, String> userData = getUserData(token);
+        String userId = userData.get(USERDATA_ID);
+        String mqttEndpoint = userData.get(USERDATA_MQTT_ENDPOINT);
 
         // TEST implementation for mqtt connection TEST
 
@@ -60,8 +65,11 @@ public class Test {
         String customAuthorizerSig = tok[2];
         String jwt = tok[0] + "." + tok[1];
 
+        // ???
+        String clientID = String.format("WX/USER/%s/oh/%s", userId, UUID.randomUUID().toString());
+
         MqttClientConnection mqttClientConnection = AwsIotMqttConnectionBuilder.newDefaultBuilder().withWebsockets(true)
-                .withClientId(UUID.randomUUID().toString()).withWebsocketSigningRegion(region)
+                .withClientId(clientID).withWebsocketSigningRegion(region)
                 .withWebsocketCredentialsProvider(
                         new DefaultChainCredentialsProvider.DefaultChainCredentialsProviderBuilder()
                                 .withClientBootstrap(ClientBootstrap.getOrCreateStaticDefault()).build())
@@ -73,10 +81,10 @@ public class Test {
                     // ??
                     httpRequest.addHeader("x-amz-customauthorizer-name", customAuthorizerName);
                     httpRequest.addHeader("x-amz-customauthorizer-signature", customAuthorizerSig);
-
+                    httpRequest.addHeader("Content-Type", "application/json; utf-8");
                     // ??
                     DecodedJWT jwth = new JWT().decodeJwt(token);
-                    httpRequest.addHeader("jwt", jwt);
+                    // httpRequest.addHeader("jwt", jwt);
                     httpRequest.addHeader("Authorization", "Bearer " + jwt);
 
                     handshakeArgs.complete(httpRequest);
@@ -84,10 +92,11 @@ public class Test {
 
         CompletableFuture<Boolean> s = mqttClientConnection.connect();
 
-        CompletableFuture<Void> s1 = mqttClientConnection.disconnect();
-
         Thread.sleep(3000);
         logger.info(s.toString());
+
+        // CompletableFuture<Void> s1 = mqttClientConnection.disconnect();
+
     }
 
     /**
@@ -96,7 +105,7 @@ public class Test {
      * @throws IOException
      * @throws ClientProtocolException
      */
-    private static String getMqttEndpoint(String token) throws IOException, ClientProtocolException {
+    private static HashMap<String, String> getUserData(String token) throws IOException, ClientProtocolException {
 
         HttpClient httpClient = HttpClientBuilder.create().build();
         HttpGet request = new HttpGet("https://api.worxlandroid.com/api/v2/users/me");
@@ -110,9 +119,12 @@ public class Test {
 
         ObjectMapper mapper = new ObjectMapper();
         JsonNode actualObj = mapper.readTree(responseString);
-        String mqttEndpoint = actualObj.get("mqtt_endpoint").textValue();
 
-        return mqttEndpoint;
+        HashMap<String, String> result = new HashMap<>();
+        result.put(USERDATA_ID, String.valueOf(actualObj.get(USERDATA_ID).asInt()));
+        result.put(USERDATA_MQTT_ENDPOINT, actualObj.get(USERDATA_MQTT_ENDPOINT).textValue());
+
+        return result;
     }
 
     /**
@@ -132,7 +144,7 @@ public class Test {
         jsonContent.add("username", new JsonPrimitive(username));
         jsonContent.add("password", new JsonPrimitive(password));
         jsonContent.add("scope", new JsonPrimitive("*"));
-        jsonContent.add("client_id", new JsonPrimitive("013132A8-DB34-4101-B993-3C8348EA0EBC"));
+        jsonContent.add("client_id", new JsonPrimitive("150da4d2-bb44-433b-9429-3773adc70a2a"));
 
         String payload = jsonContent.toString();
         StringEntity entity = new StringEntity(payload, ContentType.APPLICATION_JSON);
