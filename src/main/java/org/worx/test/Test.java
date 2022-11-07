@@ -1,7 +1,6 @@
 package org.worx.test;
 
 import java.io.IOException;
-import java.net.URISyntaxException;
 import java.util.HashMap;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -27,9 +26,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 
-import software.amazon.awssdk.crt.auth.credentials.DefaultChainCredentialsProvider;
 import software.amazon.awssdk.crt.http.HttpRequest;
-import software.amazon.awssdk.crt.io.ClientBootstrap;
 import software.amazon.awssdk.crt.mqtt.MqttClientConnection;
 import software.amazon.awssdk.iot.AwsIotMqttConnectionBuilder;
 
@@ -39,8 +36,7 @@ public class Test {
     private static final String USERDATA_ID = "id";
     private static Logger logger = Logger.getLogger(Logger.GLOBAL_LOGGER_NAME);
 
-    public static void main(String[] args)
-            throws ClientProtocolException, IOException, URISyntaxException, InterruptedException {
+    public static void main(String[] args) throws Exception {
 
         // !!!!!! enter your uaername and password !!!!!
         String username = "XXX";
@@ -68,12 +64,12 @@ public class Test {
         // ???
         String clientID = String.format("WX/USER/%s/oh/%s", userId, UUID.randomUUID().toString());
 
-        MqttClientConnection mqttClientConnection = AwsIotMqttConnectionBuilder.newDefaultBuilder().withWebsockets(true)
-                .withClientId(clientID).withWebsocketSigningRegion(region)
-                .withWebsocketCredentialsProvider(
-                        new DefaultChainCredentialsProvider.DefaultChainCredentialsProviderBuilder()
-                                .withClientBootstrap(ClientBootstrap.getOrCreateStaticDefault()).build())
-                .withEndpoint(mqttEndpoint)
+        MqttClientConnection mqttClientConnection = AwsIotMqttConnectionBuilder.newDefaultBuilder()
+                .withWebsockets(false).withClientId(clientID).withWebsocketSigningRegion(region)
+                // .withWebsocketCredentialsProvider(
+                // new DefaultChainCredentialsProvider.DefaultChainCredentialsProviderBuilder()
+                // .withClientBootstrap(ClientBootstrap.getOrCreateStaticDefault()).build())
+                .withEndpoint(mqttEndpoint).withUsername("oh")
                 // .withConnectionEventCallbacks(callbacks)
                 .withWebsocketHandshakeTransform((handshakeArgs) -> {
                     HttpRequest httpRequest = handshakeArgs.getHttpRequest();
@@ -86,16 +82,21 @@ public class Test {
                     DecodedJWT jwth = new JWT().decodeJwt(token);
                     // httpRequest.addHeader("jwt", jwt);
                     httpRequest.addHeader("Authorization", "Bearer " + jwt);
+                    httpRequest.addHeader("Bearer", jwt);
 
                     handshakeArgs.complete(httpRequest);
                 }).build();
 
-        CompletableFuture<Boolean> s = mqttClientConnection.connect();
+        // Connect and disconnect
+        CompletableFuture<Boolean> connected = mqttClientConnection.connect();
 
-        Thread.sleep(3000);
-        logger.info(s.toString());
+        boolean sessionPresent = connected.get();
+        logger.info("Connected to " + (!sessionPresent ? "new" : "existing") + " session!");
 
-        // CompletableFuture<Void> s1 = mqttClientConnection.disconnect();
+        logger.info("Disconnecting...");
+        CompletableFuture<Void> disconnected = mqttClientConnection.disconnect();
+        disconnected.get();
+        logger.info("Disconnected.");
 
     }
 
