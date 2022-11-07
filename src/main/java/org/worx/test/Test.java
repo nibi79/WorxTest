@@ -26,7 +26,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 
+import software.amazon.awssdk.crt.auth.credentials.DefaultChainCredentialsProvider;
 import software.amazon.awssdk.crt.http.HttpRequest;
+import software.amazon.awssdk.crt.io.ClientBootstrap;
 import software.amazon.awssdk.crt.mqtt.MqttClientConnection;
 import software.amazon.awssdk.iot.AwsIotMqttConnectionBuilder;
 
@@ -64,11 +66,11 @@ public class Test {
         // ???
         String clientID = String.format("WX/USER/%s/oh/%s", userId, UUID.randomUUID().toString());
 
-        MqttClientConnection mqttClientConnection = AwsIotMqttConnectionBuilder.newDefaultBuilder()
-                .withWebsockets(false).withClientId(clientID).withWebsocketSigningRegion(region)
-                // .withWebsocketCredentialsProvider(
-                // new DefaultChainCredentialsProvider.DefaultChainCredentialsProviderBuilder()
-                // .withClientBootstrap(ClientBootstrap.getOrCreateStaticDefault()).build())
+        MqttClientConnection mqttClientConnection = AwsIotMqttConnectionBuilder.newDefaultBuilder().withWebsockets(true)
+                .withClientId(clientID).withWebsocketSigningRegion(region)
+                .withWebsocketCredentialsProvider(
+                        new DefaultChainCredentialsProvider.DefaultChainCredentialsProviderBuilder()
+                                .withClientBootstrap(ClientBootstrap.getOrCreateStaticDefault()).build())
                 .withEndpoint(mqttEndpoint).withUsername("oh")
                 // .withConnectionEventCallbacks(callbacks)
                 .withWebsocketHandshakeTransform((handshakeArgs) -> {
@@ -78,6 +80,7 @@ public class Test {
                     httpRequest.addHeader("x-amz-customauthorizer-name", customAuthorizerName);
                     httpRequest.addHeader("x-amz-customauthorizer-signature", customAuthorizerSig);
                     httpRequest.addHeader("Content-Type", "application/json; utf-8");
+                    httpRequest.addHeader("protocol", "wss-custom-auth");
                     // ??
                     DecodedJWT jwth = new JWT().decodeJwt(token);
                     // httpRequest.addHeader("jwt", jwt);
