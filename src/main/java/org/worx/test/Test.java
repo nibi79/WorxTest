@@ -145,6 +145,19 @@ public class Test {
         disconnected.get();
         logger.info("Disconnected.");
 
+        /*
+         * Mqtt5Client client = builder.build();
+         * if (client == null) {
+         * System.out.println("Client creation failed!");
+         * }
+         * client.start();
+         * DisconnectPacketBuilder disconnectBuilder = new DisconnectPacketBuilder();
+         * disconnectBuilder.withReasonCode(DisconnectPacket.DisconnectReasonCode.NORMAL_DISCONNECTION);
+         * client.stop(disconnectBuilder.build());
+         *
+         * // Once fully finished with the Mqtt5Client:
+         * client.close();
+         */
     }
 
     /**
