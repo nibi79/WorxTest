@@ -2,7 +2,6 @@ package org.worx.test;
 
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Logger;
 
@@ -17,8 +16,6 @@ import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.util.EntityUtils;
 
-import com.auth0.jwt.JWT;
-import com.auth0.jwt.interfaces.DecodedJWT;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -26,9 +23,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 
-import software.amazon.awssdk.crt.auth.credentials.DefaultChainCredentialsProvider;
 import software.amazon.awssdk.crt.http.HttpRequest;
-import software.amazon.awssdk.crt.io.ClientBootstrap;
 import software.amazon.awssdk.crt.mqtt.MqttClientConnection;
 import software.amazon.awssdk.iot.AwsIotMqttConnectionBuilder;
 
@@ -41,52 +36,101 @@ public class Test {
     public static void main(String[] args) throws Exception {
 
         // !!!!!! enter your uaername and password !!!!!
-        String username = "XXX";
-        String password = "XXX";
+        String username = "";
+        String password = "";
 
         // get token
         String token = getAccessToken(username, password);
-
+        String[] deviceSettings = getDevices(token);
+        String deviceId = deviceSettings[0];
+        String deviceMqttEndpoint = deviceSettings[1];
         // get userData
         HashMap<String, String> userData = getUserData(token);
         String userId = userData.get(USERDATA_ID);
-        String mqttEndpoint = userData.get(USERDATA_MQTT_ENDPOINT);
-
+        // String mqttEndpoint = userData.get(USERDATA_MQTT_ENDPOINT);
+        String mqttEndpoint = deviceMqttEndpoint;
         // TEST implementation for mqtt connection TEST
 
         String customAuthorizerName = "com-worxlandroid-customer";
+        String usernameMqtt = "iobroker";
         // maybe you have to change the region -> read it from getMqttEndpoint
         String region = "eu-west-1";
-
+        String[] split_mqtt = mqttEndpoint.split(".");
+        if (split_mqtt.length == 3) {
+            region = split_mqtt[2];
+        }
+        final String regionF = region;
         // split token ??
-        String[] tok = token.split("\\.");
+        String[] tok = token.replaceAll("_", "/").replaceAll("-", "+").split("\\.");
         String customAuthorizerSig = tok[2];
         String jwt = tok[0] + "." + tok[1];
 
         // ???
-        String clientID = String.format("WX/USER/%s/oh/%s", userId, UUID.randomUUID().toString());
+        String clientID = String.format("WX/USER/%s/iobroker/%s", userId, deviceId);
+        /*
+         * AwsIotMqtt5ClientBuilder.MqttConnectCustomAuthConfig customAuthConfig = new
+         * AwsIotMqtt5ClientBuilder.MqttConnectCustomAuthConfig();
+         * customAuthConfig.authorizerName = customAuthorizerName;
+         * customAuthConfig.username = usernameMqtt;
+         * customAuthConfig.tokenKeyName = "jwt";
+         * customAuthConfig.tokenValue = jwt;
+         * customAuthConfig.tokenSignature = customAuthorizerSig;
+         */
+        // AwsIotMqtt5ClientBuilder.WebsocketSigv4Config customWssConfig = new
+        // AwsIotMqtt5ClientBuilder.WebsocketSigv4Config();
+        // customWssConfig.region = region;
+
+        // DefaultChainCredentialsProvider.DefaultChainCredentialsProviderBuilder creds = new
+        // DefaultChainCredentialsProvider.DefaultChainCredentialsProviderBuilder()
+        // .withClientBootstrap(ClientBootstrap.getOrCreateStaticDefault());
+
+        // customWssConfig.credentialsProvider = creds.build();
+
+        // AwsIotMqtt5ClientBuilder builder = AwsIotMqtt5ClientBuilder.newDirectMqttBuilderWithCustomAuth(mqttEndpoint,
+        // customAuthConfig);
+
+        ConnectionCallbacks callback = new ConnectionCallbacks();
+        // MyLifecycleEvents lifeCycleEvents = new MyLifecycleEvents();
+        // builder.withLifeCycleEvents(lifeCycleEvents);
+
+        // mqttEndpoint += "?x-amz-customauthorizer-name=" + customAuthorizerName + "&x-amz-customauthorizer-signature="
+        // + customAuthorizerSig + "&jwt=" + jwt;
 
         MqttClientConnection mqttClientConnection = AwsIotMqttConnectionBuilder.newDefaultBuilder().withWebsockets(true)
-                .withClientId(clientID).withWebsocketSigningRegion(region)
-                .withWebsocketCredentialsProvider(
-                        new DefaultChainCredentialsProvider.DefaultChainCredentialsProviderBuilder()
-                                .withClientBootstrap(ClientBootstrap.getOrCreateStaticDefault()).build())
-                .withEndpoint(mqttEndpoint).withUsername("oh")
-                // .withConnectionEventCallbacks(callbacks)
-                .withWebsocketHandshakeTransform((handshakeArgs) -> {
+                .withClientId(clientID)
+                // .withWebsocketSigningRegion(region)
+                // .withWebsocketCredentialsProvider(
+                // new DefaultChainCredentialsProvider.DefaultChainCredentialsProviderBuilder()
+                // .withClientBootstrap(ClientBootstrap.getOrCreateStaticDefault()).build())
+                .withEndpoint(mqttEndpoint)
+                // .withCustomAuthorizer("", customAuthorizerName, customAuthorizerSig, null)
+                .withUsername(usernameMqtt)
+
+                .withConnectionEventCallbacks(callback).withWebsocketHandshakeTransform((handshakeArgs) -> {
+
                     HttpRequest httpRequest = handshakeArgs.getHttpRequest();
+                    // String p = httpRequest.getEncodedPath();
 
-                    // ??
+                    // p += "?x-amz-customauthorizer-name=" + customAuthorizerName +
+                    // "&x-amz-customauthorizer-signature="
+                    // + customAuthorizerSig + "&jwt=" + jwt;
+                    // httpRequest.setEncodedPath(p);
+                    // httpRequest.addHeader("protocol", "wss-custom-auth");
+                    // httpRequest.addHeader("username", "iobroker");
+                    // httpRequest.addHeader("clientId", clientID);
+                    // httpRequest.addHeader("region", regionF);
                     httpRequest.addHeader("x-amz-customauthorizer-name", customAuthorizerName);
-                    httpRequest.addHeader("x-amz-customauthorizer-signature", customAuthorizerSig);
-                    httpRequest.addHeader("Content-Type", "application/json; utf-8");
-                    httpRequest.addHeader("protocol", "wss-custom-auth");
                     // ??
-                    DecodedJWT jwth = new JWT().decodeJwt(token);
-                    // httpRequest.addHeader("jwt", jwt);
-                    httpRequest.addHeader("Authorization", "Bearer " + jwt);
-                    httpRequest.addHeader("Bearer", jwt);
-
+                    // httpRequest.addHeader("x-amz-customauthorizer-name", customAuthorizerName);
+                    httpRequest.addHeader("x-amz-customauthorizer-signature", customAuthorizerSig);
+                    // httpRequest.addHeader("Content-Type", "application/json; utf-8");
+                    // httpRequest.addHeader("protocol", "wss-custom-auth");
+                    // ??
+                    // DecodedJWT jwth = new JWT().decodeJwt(token);
+                    httpRequest.addHeader("jwt", jwt);
+                    // httpRequest.addHeader("Authorization", "Bearer " + jwt);
+                    // httpRequest.addHeader("Bearer", jwt);
+                    logger.info(httpRequest.getEncodedPath());
                     handshakeArgs.complete(httpRequest);
                 }).build();
 
@@ -168,5 +212,31 @@ public class Test {
         String token = actualObj.get("access_token").textValue();
 
         return token;
+    }
+
+    private static String[] getDevices(String accessToken)
+            throws IOException, ClientProtocolException, JsonProcessingException, JsonMappingException {
+        final String apiUrl = "https://api.worxlandroid.com/api/v2/product-items?status=1&gps_status=1";
+
+        HttpClient httpClient = HttpClientBuilder.create().build();
+        HttpGet request = new HttpGet(apiUrl);
+        request.addHeader("accept", "application/json");
+        request.addHeader("content-type", "application/json");
+        request.addHeader("user-agent", "oh");
+        request.addHeader("authorization", "Bearer " + accessToken);
+        request.addHeader("accept-language", "de-de");
+
+        HttpResponse response = httpClient.execute(request);
+        HttpEntity e = response.getEntity();
+        String responseString = EntityUtils.toString(e, "UTF-8");
+
+        logger.info(String.format("statuscode %d", response.getStatusLine().getStatusCode()));
+
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode actualObj = mapper.readTree(responseString);
+        String deviceId = actualObj.get(0).get("uuid").textValue();
+        String deviceMqttEndpoint = actualObj.get(0).get("mqtt_endpoint").textValue();
+        return new String[] { deviceId, deviceMqttEndpoint };
+
     }
 }
